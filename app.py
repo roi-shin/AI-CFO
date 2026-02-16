@@ -784,7 +784,10 @@ with col_res:
                     genai.configure(api_key=api_key)
                     model = genai.GenerativeModel('gemini-2.5-flash')
                     response = model.generate_content(prompt)
-                    st.markdown(f'<div class="diagnosis-box">{response.text}</div>',
-                                unsafe_allow_html=True)
+                    if response and response.candidates and response.candidates[0].content.parts:
+                        st.markdown(f'<div class="diagnosis-box">{response.text}</div>',
+                                    unsafe_allow_html=True)
+                    else:
+                         st.error("AIからの回答が空でした。入力内容を見直すか、しばらく待ってから再試行してください。")
                 except Exception as e:
                     st.error(f"AI診断中にエラーが発生しました: {e}")
