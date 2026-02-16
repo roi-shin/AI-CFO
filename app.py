@@ -100,17 +100,101 @@ html, body, [class*="css"] {
     padding: 0.15rem 0.55rem; border-radius: 4px; font-size: 0.78rem;
 }
 
-/* ── KPI カード ── */
-.kpi-card {
-    background: #fff; border: 1px solid #E2E8F0; border-radius: 10px;
-    padding: 1.2rem; text-align: center;
-    box-shadow: 0 2px 8px rgba(0,0,0,.05); height: 100%;
+/* ── Custom KPI Card (HTML) ── */
+.custom-metric-card {
+    background-color: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 10px;
+    padding: 15px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.05);
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
 }
-.kpi-card .label { font-size: 0.82rem; color: #64748B; margin-bottom: 0.4rem; font-weight: 500; }
-.kpi-card .value { font-size: 1.6rem; font-weight: 700; color: #1E293B; }
-.kpi-card .sub   { font-size: 0.78rem; color: #94A3B8; margin-top: 0.3rem; }
-.kpi-positive { color: #10B981 !important; }
-.kpi-negative { color: #EF4444 !important; }
+.metric-label-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+.metric-label {
+    font-size: 0.8rem;
+    color: #64748B;
+    font-weight: 500;
+    line-height: 1.2;
+}
+.metric-value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+.metric-value-positive { color: #10B981; }
+.metric-value-negative { color: #EF4444; }
+.metric-value-neutral  { color: #1E293B; }
+
+.metric-sub {
+    font-size: 0.8rem;
+    color: #94A3B8;
+    margin-top: 4px;
+}
+
+/* Tooltip Styles */
+.tooltip-container {
+    position: relative;
+    display: inline-block;
+    cursor: help;
+}
+.tooltip-icon {
+    font-size: 14px;
+    color: #94A3B8;
+    background: #F1F5F9;
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+}
+.tooltip-container:hover .tooltip-icon {
+    color: #1A365D;
+    background: #E2E8F0;
+}
+.tooltip-text {
+    visibility: hidden;
+    width: 200px;
+    background-color: #334155;
+    color: #fff;
+    text-align: left;
+    border-radius: 6px;
+    padding: 8px;
+    position: absolute;
+    z-index: 10;
+    bottom: 125%;
+    left: 50%;
+    margin-left: -100px;
+    opacity: 0;
+    transition: opacity 0.3s;
+    font-size: 0.75rem;
+    font-weight: normal;
+    line-height: 1.4;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+.tooltip-text::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -5px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: #334155 transparent transparent transparent;
+}
+.tooltip-container:hover .tooltip-text {
+    visibility: visible;
+    opacity: 1;
+}
 
 /* ── 診断エリア ── */
 .diagnosis-box {
@@ -448,35 +532,105 @@ for i in range(1, 7):
 
 min_cash = min(cf_line)
 short_month = next((i for i, x in enumerate(cf_line) if x < 0), None)
+months_sales_ratio = min_cash / target_rev if target_rev > 0 else 0
 
 # ─────────────────────────────────────
 # RESULT: 診断結果
 # ─────────────────────────────────────
 st.markdown('<div class="section-title"><span class="section-badge">RESULT</span> 診断結果</div>', unsafe_allow_html=True)
 
+# Helper function for Custom Metric Card
+def custom_metric(label, value, sub="", help_text="", color_type="neutral"):
+    # color_type: "positive" (Green), "negative" (Red), "neutral" (Dark Blue/Black)
+    
+    if color_type == "positive":
+        val_class = "metric-value-positive"
+    elif color_type == "negative":
+        val_class = "metric-value-negative"
+    else:
+        val_class = "metric-value-neutral"
+    
+    # Tooltip HTML
+    tooltip_html = ""
+    if help_text:
+        tooltip_html = f'''<div class="tooltip-container">
+            <span class="tooltip-icon">?</span>
+            <span class="tooltip-text">{help_text}</span>
+        </div>'''
+
+    html = f'''
+    <div class="custom-metric-card">
+        <div class="metric-label-row">
+            <span class="metric-label">{label}</span>
+            {tooltip_html}
+        </div>
+        <div class="metric-value {val_class}">{value}</div>
+        <div class="metric-sub">{sub}</div>
+    </div>
+    '''
+    return html
+
 # KPIカード
 k1, k2, k3, k4, k5 = st.columns(5)
 with k1:
-    cls = "kpi-positive" if target_op_profit >= 0 else "kpi-negative"
-    st.markdown(f'''<div class="kpi-card"><div class="label">月次営業利益（目標時）</div><div class="value {cls}">{jp_format(target_op_profit)}</div></div>''', unsafe_allow_html=True)
+    st.markdown(custom_metric(
+        label="月次営業利益（目標時）",
+        value=jp_format(target_op_profit),
+        sub="",
+        help_text="売上から変動費と固定費を引いた残り。プラスなら黒字、マイナスなら赤字です。",
+        color_type="positive" if target_op_profit >= 0 else "negative"
+    ), unsafe_allow_html=True)
 with k2:
-    cls = "kpi-positive" if safety_margin_ratio >= 0 else "kpi-negative"
-    st.markdown(f'''<div class="kpi-card"><div class="label">売上ダウン耐性 (安全余裕率)</div><div class="value {cls}">{safety_margin_ratio:+.1f}%</div><div class="sub">あと{safety_margin_ratio:.1f}%落ちても黒字</div></div>''', unsafe_allow_html=True)
+    sub_text = f"あと{safety_margin_ratio:.1f}%減少まで黒字" if safety_margin_ratio > 0 else "既に赤字"
+    st.markdown(custom_metric(
+        label="売上ダウン耐性 (安全余裕率)",
+        value=f"{safety_margin_ratio:+.1f}%",
+        sub=sub_text,
+        help_text="現在の売上が損益分岐点からどれだけ余裕があるかを示します。数値が大きいほど安全。マイナスなら既に赤字です。",
+        color_type="positive" if safety_margin_ratio >= 0 else "negative"
+    ), unsafe_allow_html=True)
 with k3:
-    st.markdown(f'''<div class="kpi-card"><div class="label">損益分岐点売上高 (BEP)</div><div class="value">{jp_format(bep_rev)}</div><div class="sub">月商{jp_format(bep_rev)}以上で黒字</div></div>''', unsafe_allow_html=True)
+    st.markdown(custom_metric(
+        label="損益分岐点売上高 (BEP)",
+        value=jp_format(bep_rev),
+        sub=f"月商{jp_format(bep_rev)}でトントン",
+        help_text="利益がちょうどゼロになる売上高。これを下回ると赤字に転落します。固定費が重いほど、この金額は高くなります。",
+        color_type="neutral"
+    ), unsafe_allow_html=True)
 with k4:
-    c_cls = "kpi-positive" if cf_line[-1] >= 0 else "kpi-negative"
-    st.markdown(f'''<div class="kpi-card"><div class="label">期間中 最低現預金残高</div><div class="value {c_cls}">{jp_format(min_cash)}</div></div>''', unsafe_allow_html=True)
+    sub_c = "確保済み" if min_cash >= 0 else "資金ショート"
+    st.markdown(custom_metric(
+        label="期間中 最低現預金残高",
+        value=jp_format(min_cash),
+        sub=sub_c,
+        help_text="6ヶ月間のシミュレーションで、最も手元資金が少なくなるタイミングの残高です。マイナスなら資金ショート（支払不能）が発生します。",
+        color_type="positive" if min_cash >= 0 else "negative"
+    ), unsafe_allow_html=True)
 with k5:
     if invest > 0:
-        st.markdown(f'''<div class="kpi-card"><div class="label">投資回収に必要な売上 (損益分岐点売上高の増加分)</div><div class="value">{jp_format(invest_payback_sales)}</div></div>''', unsafe_allow_html=True)
+        st.markdown(custom_metric(
+            label="投資回収に必要な売上",
+            value=jp_format(invest_payback_sales),
+            sub="損益分岐点の増加分",
+            help_text="固定費を増やした（投資した）分を取り返すために、最低限これだけ売上を増やす必要があるという金額です。",
+            color_type="neutral"
+        ), unsafe_allow_html=True)
     else:
-        # 投資なしの場合、最低残高を表示するスペースが重複するため、5つ目のカードはブランクにするか別の情報を入れる
-        # ここでは「最低資金残高」をk4に移動し、k5は予備スペースとする、あるいは「キャッシュフロー変動額」などを出す
-        # ユーザー要望で「最低資金残高が何を示すか不明」とのことなので、k4のラベルを具体的にしました。
-        # k5が空くので、ここには「月商倍率」などを入れると分かりやすい
-        months_sales_ratio = min_cash / target_rev if target_rev > 0 else 0
-        st.markdown(f'''<div class="kpi-card"><div class="label">現預金月商倍率 (最低時)</div><div class="value">{months_sales_ratio:.1f}ヶ月</div></div>''', unsafe_allow_html=True)
+        # Determine color based on months_sales_ratio
+        # 3.0+ Safe (Green), 1.0-3.0 Normal (Neutral/Green?), <1.0 Dangerous (Red)
+        # Simplified: >1.0 Green/Neutral, <1.0 Red?
+        # Let's stick to simple: < 1.0 is Negative, else Positive (or Neutral?)
+        # User said "Concept of red/black/green".
+        # Let's make it simple: < 1.0 is Danger (Red), >= 1.0 is Safe (Green) for now.
+        m_color = "positive" if months_sales_ratio >= 1.0 else "negative"
+        
+        st.markdown(custom_metric(
+            label="現預金月商倍率 (最低時)",
+            value=f"{months_sales_ratio:.1f}ヶ月",
+            sub="3.0ヶ月以上で安全圏",
+            help_text="月商の何ヶ月分の現預金を持っているかを示します。目安：1.0ヶ月未満は危険水域（自転車操業）、1.0〜1.5ヶ月は要注意、1.5〜3.0ヶ月は通常、3.0ヶ月以上は安全です。",
+            color_type=m_color
+        ), unsafe_allow_html=True)
 
 st.write("")
 
@@ -589,6 +743,7 @@ with col_res:
 
 ### ① 資金繰りリスクの評価
 - 資金推移（6ヶ月間で最も現金が減った時の残高: {jp_format(min_cash)}）を分析し、資金ショートのリスクがあれば警告してください。
+- 現預金月商倍率（最低時）が{months_sales_ratio:.1f}ヶ月分あることが、どの程度の安全性（または危険性）を示すのか評価してください。
 - ショートや減少の原因が「売上急増による運転資金の増加（黒字倒産リスク）」なのか、「赤字垂れ流しによる資金枯渇」なのかを明確に区別して指摘してください。
 - 業界（{ind}）の平均的な回収サイクルと比べて、貴社のサイト（入金{m_rec:.1f}ヶ月、出金{m_pay:.1f}ヶ月）が適正かも一言触れてください。
 
@@ -607,6 +762,7 @@ with col_res:
 - 損益分岐点売上高: {jp_format(bep_rev)}
 - 6ヶ月後残高: {jp_format(cf_line[-1])}
 - 資金ショート: {"あり（黒字倒産リスク）" if short_month else "なし"}
+- 現預金月商倍率（最低時）: {months_sales_ratio:.1f}ヶ月
 """
             with st.spinner("AI-CFOがデータを分析中..."):
                 try:
