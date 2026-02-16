@@ -387,10 +387,12 @@ with st.sidebar:
 st.markdown('<div class="section-title"><span class="section-badge">STEP 1</span> 現状の数値入力</div>', unsafe_allow_html=True)
 
 # 業界選択
+st.markdown("##### 🏢 貴社の業種 （AI診断の基準になります）")
 st.session_state["industry"] = st.selectbox(
-    "🏢 貴社の業種（AI診断の基準になります）",
+    "industry_hidden",
     ["製造業", "建設業", "IT・サービス業", "飲食業", "小売業", "卸売業", "医療・福祉", "その他"],
-    index=["製造業", "建設業", "IT・サービス業", "飲食業", "小売業", "卸売業", "医療・福祉", "その他"].index(st.session_state.get("industry", "その他")) if st.session_state.get("industry") in ["製造業", "建設業", "IT・サービス業", "飲食業", "小売業", "卸売業", "医療・福祉", "その他"] else 7
+    index=["製造業", "建設業", "IT・サービス業", "飲食業", "小売業", "卸売業", "医療・福祉", "その他"].index(st.session_state.get("industry", "その他")) if st.session_state.get("industry") in ["製造業", "建設業", "IT・サービス業", "飲食業", "小売業", "卸売業", "医療・福祉", "その他"] else 7,
+    label_visibility="collapsed"
 )
 
 col_pl, col_bs = st.columns([1, 1], gap="large")
@@ -402,7 +404,7 @@ fixed_step   = get_step_size(st.session_state["fixed_cost"])
 bs_step      = get_step_size(st.session_state["cash"])
 
 with col_pl:
-    st.markdown("##### 損益計算書（月次平均）")
+    st.markdown("##### 損益計算書 （月次平均）")
     
     st.markdown(custom_label("月間売上高", "直近の月平均売上高を入力してください（万円単位・税抜）。"), unsafe_allow_html=True)
     st.session_state["revenue"] = st.number_input(
@@ -414,14 +416,14 @@ with col_pl:
         "変動費（仕入・外注・材料）", min_value=0, step=cogs_step,
         value=st.session_state["cogs"], format="%d", label_visibility="collapsed")
     
-    if st.session_state["revenue"] > 0:
-        rate = st.session_state["cogs"] / st.session_state["revenue"]
-        st.caption(f"変動費率: **{rate:.1%}**")
-
     st.markdown(custom_label("固定費（家賃・給与・その他）", "売上がゼロでも毎月かかるコスト（家賃、人件費、リース料、水道光熱費など）。"), unsafe_allow_html=True)
     st.session_state["fixed_cost"] = st.number_input(
         "固定費（家賃・給与・その他）", min_value=0, step=fixed_step,
         value=st.session_state["fixed_cost"], format="%d", label_visibility="collapsed")
+    
+    if st.session_state["revenue"] > 0:
+        rate = st.session_state["cogs"] / st.session_state["revenue"]
+        st.info(f"変動費率: **{rate:.1%}**")
 
 with col_bs:
     st.markdown("##### 貸借対照表（現在の残高）")
@@ -454,7 +456,7 @@ with col_bs:
 # STEP 2: シナリオ設定
 # ─────────────────────────────────────
 st.markdown('<div class="section-title"><span class="section-badge">STEP 2</span> シナリオ設定（感度分析）</div>', unsafe_allow_html=True)
-st.caption("※ 売上が急増する際、運転資金の増加によって一時的に資金が減るリスクがあります。")
+st.markdown('<span style="color:#d32f2f; font-weight:bold; font-size:0.9rem;">⚠️ 売上が急増する際、運転資金の増加によって一時的に資金が減るリスクがあります。</span>', unsafe_allow_html=True)
 
 s1, s2, s3, s4 = st.columns(4, gap="medium")
 slider_invest_step = max(10_000, fixed_step // 10)
@@ -479,9 +481,7 @@ with s1:
         label_visibility="collapsed"
     )
     if st.session_state.get("invest", 0) != 0: 
-        st.caption(f"変化額: {jp_format(st.session_state['invest'])}")
-    else:
-        st.caption("スライダーまたは数値入力で調整")
+        st.markdown(f"**変化額: {jp_format(st.session_state['invest'])}**")
 
 with s2:
     st.markdown("**仕入・外注単価の変動**")
@@ -513,7 +513,7 @@ with s3:
     )
     
     target_rev_preview = st.session_state["revenue"] * (1 + st.session_state.get("sales_change", 0) / 100)
-    st.caption(f"目標: {jp_format(target_rev_preview)}")
+    st.markdown(f"**目標: {jp_format(target_rev_preview)}**")
 
 with s4:
     st.markdown("**目標達成期間**")
@@ -604,60 +604,48 @@ with k1:
         label="月次営業利益（目標時）",
         value=jp_format(target_op_profit),
         sub="",
-        help_text="売上から変動費と固定費を引いた残り。プラスなら黒字、マイナスなら赤字です。",
+        help_text=f"目標売上 {jp_format(target_rev)} の時の営業利益",
         color_type="positive" if target_op_profit >= 0 else "negative"
     ), unsafe_allow_html=True)
+
 with k2:
-    sub_text = f"あと{safety_margin_ratio:.1f}%減少まで黒字" if safety_margin_ratio > 0 else "既に赤字"
     st.markdown(custom_metric(
-        label="売上ダウン耐性 (安全余裕率)",
-        value=f"{safety_margin_ratio:+.1f}%",
-        sub=sub_text,
-        help_text="現在の売上が損益分岐点からどれだけ余裕があるかを示します。数値が大きいほど安全。マイナスなら既に赤字です。",
-        color_type="positive" if safety_margin_ratio >= 0 else "negative"
-    ), unsafe_allow_html=True)
-with k3:
-    st.markdown(custom_metric(
-        label="損益分岐点売上高 (BEP)",
+        label="損益分岐点売上高",
         value=jp_format(bep_rev),
-        sub=f"月商{jp_format(bep_rev)}でトントン",
-        help_text="利益がちょうどゼロになる売上高。これを下回ると赤字に転落します。固定費が重いほど、この金額は高くなります。",
+        sub="",
+        help_text=f"売上 {jp_format(bep_rev)} で収支均衡（利益ゼロ）",
         color_type="neutral"
     ), unsafe_allow_html=True)
-with k4:
-    sub_c = "確保済み" if min_cash >= 0 else "資金ショート"
+
+with k3:
     st.markdown(custom_metric(
-        label="期間中 最低現預金残高",
-        value=jp_format(min_cash),
-        sub=sub_c,
-        help_text="6ヶ月間のシミュレーションで、最も手元資金が少なくなるタイミングの残高です。マイナスなら資金ショート（支払不能）が発生します。",
-        color_type="positive" if min_cash >= 0 else "negative"
+        label="安全余裕率",
+        value=f"{safety_margin_ratio:.1f}%",
+        sub=f"売上{safety_margin_ratio:.1f}%減まで黒字" if safety_margin_ratio > 0 else "赤字水準",
+        help_text="現在の売上がどれだけ減っても赤字にならないかの割合",
+        color_type="positive" if safety_margin_ratio > 0 else "negative"
     ), unsafe_allow_html=True)
+
+with k4:
+    sub_text = f"{invest_payback_sales/10000:.0f}万円の売上が必要" if invest > 0 else ""
+    st.markdown(custom_metric(
+        label="投資回収に必要な売上",
+        value=jp_format(invest_payback_sales),
+        sub=sub_text,
+        help_text="増えた固定費（投資）を賄うために必要な追加売上高",
+        color_type="neutral"
+    ), unsafe_allow_html=True)
+
 with k5:
-    if invest > 0:
-        st.markdown(custom_metric(
-            label="投資回収に必要な売上",
-            value=jp_format(invest_payback_sales),
-            sub="損益分岐点の増加分",
-            help_text="固定費を増やした（投資した）分を取り返すために、最低限これだけ売上を増やす必要があるという金額です。",
-            color_type="neutral"
-        ), unsafe_allow_html=True)
-    else:
-        # Determine color based on months_sales_ratio
-        # 3.0+ Safe (Green), 1.0-3.0 Normal (Neutral/Green?), <1.0 Dangerous (Red)
-        # Simplified: >1.0 Green/Neutral, <1.0 Red?
-        # Let's stick to simple: < 1.0 is Negative, else Positive (or Neutral?)
-        # User said "Concept of red/black/green".
-        # Let's make it simple: < 1.0 is Danger (Red), >= 1.0 is Safe (Green) for now.
-        m_color = "positive" if months_sales_ratio >= 1.0 else "negative"
-        
-        st.markdown(custom_metric(
-            label="現預金月商倍率 (最低時)",
-            value=f"{months_sales_ratio:.1f}ヶ月",
-            sub="3.0ヶ月以上で安全圏",
-            help_text="月商の何ヶ月分の現預金を持っているかを示します。目安：1.0ヶ月未満は危険水域（自転車操業）、1.0〜1.5ヶ月は要注意、1.5〜3.0ヶ月は通常、3.0ヶ月以上は安全です。",
-            color_type=m_color
-        ), unsafe_allow_html=True)
+    st.markdown(custom_metric(
+        label="最低預金残高（6ヶ月間）",
+        value=jp_format(min_cash),
+        sub="" if min_cash > 0 else "資金ショート警告",
+        help_text="今後6ヶ月で最も預金が減るタイミングの残高",
+        color_type="positive" if min_cash > 0 else "negative"
+    ), unsafe_allow_html=True)
+
+
 
 st.write("")
 
