@@ -1,9 +1,8 @@
 """
 GAIS AI-CFO（未来会計シミュレーター）
 =======================================
-決算書の数字を入れるだけで、AI導入による「未来の資金繰り」と
-「損益分岐点」を視覚的にシミュレーションできる経営コックピット。
-Gemini 2.5 Pro による AI-CFO 診断付き。
+決算書の数字を入力し、経営シナリオの感度分析（Jカーブ効果含む）を行うコックピット。
+Gemini 2.5 Flash による AI-CFO 診断付き。
 """
 
 import streamlit as st
@@ -18,8 +17,49 @@ st.set_page_config(
     page_title="GAIS AI-CFO｜未来会計シミュレーター",
     page_icon="📊",
     layout="wide",
-    initial_sidebar_state="expanded", # サイドバーはデフォルトで開く
+    initial_sidebar_state="expanded",
 )
+
+# ─────────────────────────────────────
+# ヘルパー関数
+# ─────────────────────────────────────
+def get_step_size(val):
+    if val >= 100_000_000: return 1_000_000
+    if val >= 10_000_000:  return 100_000
+    if val >= 1_000_000:   return 10_000
+    return 1_000
+
+def jp_format(val):
+    abs_val = abs(val)
+    if abs_val >= 100_000_000:
+        return f"{val/100_000_000:.1f}億円"
+    elif abs_val >= 10_000:
+        return f"{val/10_000:.0f}万円"
+    else:
+        return f"{val:,.0f}円"
+
+# ─────────────────────────────────────
+# 回帰コールバック（スライダー同期）
+# ─────────────────────────────────────
+if "invest" not in st.session_state: st.session_state["invest"] = 0
+if "sales_change" not in st.session_state: st.session_state["sales_change"] = 0
+
+def update_invest_from_slider():
+    st.session_state["invest"] = st.session_state["invest_slider"]
+    st.session_state["invest_number"] = st.session_state["invest_slider"]
+
+def update_invest_from_number():
+    st.session_state["invest"] = st.session_state["invest_number"]
+    st.session_state["invest_slider"] = st.session_state["invest_number"]
+
+def update_sales_from_slider():
+    st.session_state["sales_change"] = st.session_state["sales_slider"]
+    st.session_state["sales_number"] = st.session_state["sales_slider"]
+    
+def update_sales_from_number():
+    st.session_state["sales_change"] = st.session_state["sales_number"]
+    st.session_state["sales_slider"] = st.session_state["sales_number"]
+
 
 # ─────────────────────────────────────
 # カスタム CSS
@@ -28,75 +68,63 @@ st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700;900&display=swap');
 
-/* ── 全体 ── */
 html, body, [class*="css"] {
     font-family: 'Noto Sans JP', sans-serif;
-    color: #333; /* 文字色は濃いグレーで見やすく */
+    color: #333;
 }
 .block-container { padding-top: 1rem; max-width: 1200px; }
 
 /* ── ヘッダー ── */
 .main-header {
-    background: linear-gradient(135deg, #1A365D 0%, #2A4365 100%); /* ネイビーベース */
+    background: linear-gradient(135deg, #1A365D 0%, #2A4365 100%);
     color: #fff;
-    padding: 1.5rem 2rem;
+    padding: 1.4rem 2rem;
     border-radius: 12px;
-    margin-bottom: 2rem;
+    margin-bottom: 1.8rem;
     box-shadow: 0 4px 12px rgba(0,0,0,.15);
     text-align: center;
 }
-.main-header h1 {
-    margin: 0; font-size: 1.8rem; font-weight: 700;
-    color: #fff;
-}
-.main-header p { margin: .5rem 0 0; font-size: 0.9rem; opacity: 0.9; }
+.main-header h1 { margin: 0; font-size: 1.7rem; font-weight: 700; color: #fff; }
+.main-header p  { margin: .4rem 0 0; font-size: 0.88rem; opacity: 0.9; }
 
 /* ── セクション見出し ── */
 .section-title {
-    font-size: 1.2rem; font-weight: 700; color: #1A365D; /* ネイビー */
+    font-size: 1.15rem; font-weight: 700; color: #1A365D;
     border-bottom: 2px solid #E2E8F0;
-    padding-bottom: 0.5rem;
-    margin: 2.5rem 0 1.5rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
+    padding-bottom: 0.4rem;
+    margin: 2rem 0 1.2rem;
+    display: flex; align-items: center; gap: 0.5rem;
 }
 .section-badge {
-    background-color: #1A365D; color: #fff; padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.8rem; vertical-align: middle;
+    background-color: #1A365D; color: #fff;
+    padding: 0.15rem 0.55rem; border-radius: 4px; font-size: 0.78rem;
 }
 
 /* ── KPI カード ── */
 .kpi-card {
-    background: #fff;
-    border: 1px solid #E2E8F0;
-    border-radius: 10px;
-    padding: 1.5rem;
-    text-align: center;
-    box-shadow: 0 2px 8px rgba(0,0,0,.05);
-    height: 100%;
+    background: #fff; border: 1px solid #E2E8F0; border-radius: 10px;
+    padding: 1.2rem; text-align: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,.05); height: 100%;
 }
-.kpi-card .label { font-size: 0.85rem; color: #64748B; margin-bottom: 0.5rem; font-weight: 500;}
-.kpi-card .value { font-size: 1.8rem; font-weight: 700; color: #1E293B; }
-.kpi-positive { color: #10B981 !important; } /* Green */
-.kpi-negative { color: #EF4444 !important; } /* Red */
+.kpi-card .label { font-size: 0.82rem; color: #64748B; margin-bottom: 0.4rem; font-weight: 500; }
+.kpi-card .value { font-size: 1.6rem; font-weight: 700; color: #1E293B; }
+.kpi-card .sub   { font-size: 0.78rem; color: #94A3B8; margin-top: 0.3rem; }
+.kpi-positive { color: #10B981 !important; }
+.kpi-negative { color: #EF4444 !important; }
 
 /* ── 診断エリア ── */
 .diagnosis-box {
-    background: #F8FAFC;
-    border: 1px solid #E2E8F0;
-    border-left: 5px solid #1A365D;
-    border-radius: 8px;
-    padding: 2rem;
-    color: #334155;
-    line-height: 1.7;
-    margin-top: 1rem;
+    background: #F8FAFC; border: 1px solid #E2E8F0;
+    border-left: 5px solid #1A365D; border-radius: 8px;
+    padding: 1.8rem; color: #334155; line-height: 1.7; margin-top: 1rem;
 }
-.diagnosis-box h3 { color: #1A365D; margin-top: 1.5rem; font-size: 1.1rem; border-bottom: 1px dashed #CBD5E1; padding-bottom: 0.3rem;}
+.diagnosis-box h3 {
+    color: #1A365D; margin-top: 1.2rem; font-size: 1.05rem;
+    border-bottom: 1px dashed #CBD5E1; padding-bottom: 0.3rem;
+}
 
-/* ── 入力フィールドラベル ── */
-div[data-testid="stNumberInput"] label {
-    font-weight: 600; color: #475569;
-}
+/* ── 入力ラベル ── */
+div[data-testid="stNumberInput"] label { font-weight: 600; color: #475569; }
 .stSlider label { font-weight: 600; color: #475569; }
 
 /* ── 警告バー ── */
@@ -109,29 +137,30 @@ div[data-testid="stNumberInput"] label {
     padding: 1rem; border-radius: 8px; margin-bottom: 1rem; font-weight: 500;
 }
 
-/* ── サイドバー開閉ボタンの常時表示 ── */
-/* Streamlitのバージョンによってはセレクタが異なる場合がありますが、代表的なものをカバー */
+/* ── サイドバー開閉ボタン常時表示＆位置調整 ── */
 [data-testid="stSidebarCollapsedControl"] {
-    display: block !important;
-    color: #1A365D !important;
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    z-index: 1000000 !important;
+    margin-top: 4px; 
+    margin-left: 4px;
 }
 section[data-testid="stSidebar"] button[kind="hex"] {
-    /* 閉じるボタン（<） */
-    display: block !important;
+    display: flex !important;
+    visibility: visible !important;
     opacity: 1 !important;
-    color: #1A365D !important;
-}
-/* 開くボタン（>） */
-button[kind="header"] {
-    display: block !important;
-    opacity: 1 !important;
-    color: #1A365D !important;
-}
-div[data-testid="collapsedControl"] {
-    display: block !important;
-    color: #1A365D !important;
 }
 
+/* グラフタイトルの調整 */
+.graph-header {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #334155;
+    margin-bottom: 0.5rem;
+    border-left: 4px solid #64748B;
+    padding-left: 0.5rem;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -140,8 +169,8 @@ div[data-testid="collapsedControl"] {
 # ─────────────────────────────────────
 st.markdown("""
 <div class="main-header">
-    <h1>📊 GAIS AI-CFO ｜ 未来会計シミュレーター</h1>
-    <p>1画面コックピットで経営の未来を予測・診断</p>
+    <h1>GAIS AI-CFO ｜ 未来会計シミュレーター</h1>
+    <p>数字を入力し、スライダーで経営シナリオを変えると、資金繰り（死の谷）とリスクが可視化されます</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -151,338 +180,414 @@ st.markdown("""
 # ─────────────────────────────────────
 DEMO_DATA = {
     "construction": {
-        "label": "🏢 建設業",
+        "label": "建設業",
         "revenue": 8_000_000,
         "cogs": 5_600_000,
         "fixed_cost": 1_800_000,
         "cash": 5_000_000,
-        "receivables": 16_000_000, # 2ヶ月
+        "receivables": 16_000_000,
         "payables": 5_600_000,
     },
     "it_service": {
-        "label": "💻 IT・サービス業",
+        "label": "IT・サービス業",
         "revenue": 5_000_000,
-        "cogs": 2_000_000, # 変動費率40%
+        "cogs": 2_000_000,
         "fixed_cost": 2_500_000,
         "cash": 3_000_000,
-        "receivables": 7_500_000, # 1.5ヶ月
+        "receivables": 7_500_000,
         "payables": 2_000_000,
     },
     "restaurant": {
-        "label": "🍽️ 飲食業",
+        "label": "飲食業",
         "revenue": 3_500_000,
-        "cogs": 1_225_000, # 変動費率35%
+        "cogs": 1_225_000,
         "fixed_cost": 1_900_000,
         "cash": 1_500_000,
-        "receivables": 350_000, # 現金商売に近い
+        "receivables": 350_000,
         "payables": 612_500,
     },
 }
 
 # ─────────────────────────────────────
-# セッション初期化 (デフォルトはITサービス)
+# セッション初期化
 # ─────────────────────────────────────
 defaults = {
-    "revenue": 5_000_000,
-    "cogs": 2_000_000,
-    "fixed_cost": 2_500_000,
-    "cash": 3_000_000,
-    "receivables": 7_500_000,
-    "payables": 2_000_000,
+    "revenue": 5_000_000, "cogs": 2_000_000, "fixed_cost": 2_500_000,
+    "cash": 3_000_000, "receivables": 7_500_000, "payables": 2_000_000,
+    "industry": "IT・サービス業", 
 }
 for k, v in defaults.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
 # ─────────────────────────────────────
-# サイドバー（デモデータのみ）
+# サイドバー
 # ─────────────────────────────────────
 with st.sidebar:
-    st.header("🛠️ デモデータ読込")
-    st.caption("業種ごとのサンプルを一括ロードします")
-    
-    # 縦並びボタン
+    st.header("デモデータ")
     for key, data in DEMO_DATA.items():
         if st.button(data["label"], key=f"demo_{key}", use_container_width=True):
-             for field in ["revenue", "cogs", "fixed_cost", "cash", "receivables", "payables"]:
-                st.session_state[field] = data[field]
-             st.rerun()
-    
-    st.info("💡 **使い方**\n\nここでの入力は初期値です。デモを選んだら、右側のパネルで数値を調整してください。")
+            for field in defaults:
+                if field in data: st.session_state[field] = data[field]
+            st.session_state["industry"] = data["label"] # 業界も更新
+            st.session_state["invest"] = 0 # リセット
+            st.session_state["sales_change"] = 0 # リセット
+            # 同期変数のリセット
+            st.session_state["sales_slider"] = 0
+            st.session_state["sales_number"] = 0
+            st.session_state["invest_slider"] = 0
+            st.session_state["invest_number"] = 0
+            st.rerun()
     st.markdown("---")
-    st.caption("👈 左上の「<」でメニューを閉じ、「>」で再度開けます。")
+    st.header("ストレステスト")
+    if st.button("売上 -30% を検証", key="stress_test", use_container_width=True):
+        st.session_state["sales_change"] = -30
+        st.session_state["sales_slider"] = -30 
+        st.session_state["sales_number"] = -30
+        st.rerun()
 
 
 # ─────────────────────────────────────
-# メイン画面：STEP 1 現状の把握
+# STEP 1: 現状の数値入力
 # ─────────────────────────────────────
-st.markdown('<div class="section-title"><span class="section-badge">STEP 1</span> 現状の数値入力（PL/BS）</div>', unsafe_allow_html=True)
-st.info("💡 ここで入力された数字は「ひと月あたり（月次平均）」の金額です。")
+st.markdown('<div class="section-title"><span class="section-badge">STEP 1</span> 現状の数値入力</div>', unsafe_allow_html=True)
 
-# 入力フォームを2列×3行ではなく、意味のあるグループで横展開
+# 業界選択
+st.session_state["industry"] = st.selectbox(
+    "🏢 貴社の業種（AI診断の基準になります）",
+    ["製造業", "建設業", "IT・サービス業", "飲食業", "小売業", "卸売業", "医療・福祉", "その他"],
+    index=["製造業", "建設業", "IT・サービス業", "飲食業", "小売業", "卸売業", "医療・福祉", "その他"].index(st.session_state.get("industry", "その他")) if st.session_state.get("industry") in ["製造業", "建設業", "IT・サービス業", "飲食業", "小売業", "卸売業", "医療・福祉", "その他"] else 7
+)
+
 col_pl, col_bs = st.columns([1, 1], gap="large")
 
+# ステップ値の動的決定
+revenue_step = get_step_size(st.session_state["revenue"])
+cogs_step    = get_step_size(st.session_state["cogs"])
+fixed_step   = get_step_size(st.session_state["fixed_cost"])
+bs_step      = get_step_size(st.session_state["cash"])
+
 with col_pl:
-    st.markdown("##### 📄 損益(PL)情報 <small style='color:#666'>（月次平均）</small>", unsafe_allow_html=True)
-    c1, c2, c3 = st.columns(3)
+    st.markdown("##### 損益計算書（月次平均）")
+    c1, c2 = st.columns(2)
     with c1:
-        st.session_state["revenue"] = st.number_input("ひと月の売上高", min_value=0, step=100000, value=st.session_state["revenue"], format="%d")
+        st.session_state["revenue"] = st.number_input(
+            "月間売上高", min_value=0, step=revenue_step,
+            value=st.session_state["revenue"], format="%d")
+        st.session_state["cogs"] = st.number_input(
+            "変動費（仕入・外注・材料）", min_value=0, step=cogs_step,
+            value=st.session_state["cogs"], format="%d", help="売上増減に比例するコスト")
     with c2:
-        st.session_state["cogs"] = st.number_input("ひと月の売上原価", min_value=0, step=100000, value=st.session_state["cogs"], format="%d")
-    with c3:
-        st.session_state["fixed_cost"] = st.number_input("ひと月の固定費", min_value=0, step=100000, value=st.session_state["fixed_cost"], format="%d")
-    
-    # 自動計算の変動費率を表示（入力補助）
-    if st.session_state["revenue"] > 0:
-        rate = st.session_state["cogs"] / st.session_state["revenue"]
-        st.caption(f"📊 変動費率: **{rate:.1%}** （売上に占める原価の割合）")
+        st.session_state["fixed_cost"] = st.number_input(
+            "固定費（家賃・給与・その他）", min_value=0, step=fixed_step,
+            value=st.session_state["fixed_cost"], format="%d", help="売上ゼロでもかかるコスト")
+        
+        if st.session_state["revenue"] > 0:
+            rate = st.session_state["cogs"] / st.session_state["revenue"]
+            st.info(f"変動費率: **{rate:.1%}**")
 
 with col_bs:
-    st.markdown("##### 💰 貸借(BS)情報 <small style='color:#666'>（現在の残高）</small>", unsafe_allow_html=True)
-    c4, c5, c6 = st.columns(3)
+    st.markdown("##### 貸借対照表（現在の残高）")
+    c3, c4 = st.columns(2)
+    with c3:
+        st.session_state["cash"] = st.number_input(
+            "現預金残高", min_value=0, step=bs_step,
+            value=st.session_state["cash"], format="%d")
+        st.session_state["receivables"] = st.number_input(
+            "売掛金残高", min_value=0, step=bs_step,
+            value=st.session_state["receivables"], format="%d")
     with c4:
-        st.session_state["cash"] = st.number_input("現預金残高", min_value=0, step=100000, value=st.session_state["cash"], format="%d")
-    with c5:
-        st.session_state["receivables"] = st.number_input("売掛金残高", min_value=0, step=100000, value=st.session_state["receivables"], format="%d")
-    with c6:
-        st.session_state["payables"] = st.number_input("買掛金残高", min_value=0, step=100000, value=st.session_state["payables"], format="%d")
+        st.session_state["payables"] = st.number_input(
+            "買掛金残高", min_value=0, step=bs_step,
+            value=st.session_state["payables"], format="%d")
 
-    # 自動計算のサイトを表示
-    site_msg = []
-    if st.session_state["revenue"] > 0:
-        m_rec = st.session_state["receivables"] / st.session_state["revenue"]
-        site_msg.append(f"売掛回収までの期間: <b>{m_rec:.1f}ヶ月</b>")
-    if st.session_state["cogs"] > 0:
-        m_pay = st.session_state["payables"] / st.session_state["cogs"]
-        site_msg.append(f"買掛支払までの期間: <b>{m_pay:.1f}ヶ月</b>")
-    if site_msg:
-        st.markdown(f"<small>⏳ {' / '.join(site_msg)}</small>", unsafe_allow_html=True)
+        site_parts = []
+        if st.session_state["revenue"] > 0:
+            site_parts.append(f"売掛回収: {st.session_state['receivables']/st.session_state['revenue']:.1f}ヶ月")
+        if st.session_state["cogs"] > 0:
+            site_parts.append(f"買掛支払: {st.session_state['payables']/st.session_state['cogs']:.1f}ヶ月")
+        if site_parts:
+            st.info(f"{' ／ '.join(site_parts)}")
 
 
 # ─────────────────────────────────────
-# メイン画面：STEP 2 未来シミュレーション
+# STEP 2: シナリオ設定
 # ─────────────────────────────────────
-st.markdown('<div class="section-title"><span class="section-badge">STEP 2</span> 未来シミュレーション（スライダー操作）</div>', unsafe_allow_html=True)
-st.info("💡 スライダーを動かすと、**来月以降ずっと** その状態が続くと仮定して計算します。")
+st.markdown('<div class="section-title"><span class="section-badge">STEP 2</span> シナリオ設定（感度分析）</div>', unsafe_allow_html=True)
+st.caption("※ 「売上が急増すると運転資金が不足する（死の谷）」リスクも計算します。")
 
-# 3つのスライダーを横並びに配置
-slider_cols = st.columns(3, gap="medium")
+s1, s2, s3, s4 = st.columns(4, gap="medium")
+slider_invest_step = max(10_000, fixed_step // 10)
 
-with slider_cols[0]:
-    invest = st.slider(
-        "🚀 投資、固定費の増減（月額）", 
-        min_value=-1000000, max_value=1000000, value=0, step=10000, # 減らす方にも振れるように
-        format="¥%d", 
-        help="来月以降、固定費を増やしますか？減らしますか？（プラス＝投資増、マイナス＝コストカット）"
+# スライダーと入力欄の同期（Invest & Sales）
+
+with s1:
+    st.markdown("**固定費の増減（月額）**")
+    st.slider(
+        "invest_slider_hidden", # ラベル非表示（Markdownで自作）
+        min_value=-5_000_000, max_value=5_000_000, 
+        value=st.session_state.get("invest", 0), 
+        step=slider_invest_step,
+        key="invest_slider", on_change=update_invest_from_slider,
+        label_visibility="collapsed"
     )
+    st.number_input(
+        "金額指定", 
+        value=st.session_state.get("invest", 0), 
+        step=slider_invest_step,
+        key="invest_number", on_change=update_invest_from_number,
+        label_visibility="collapsed"
+    )
+    if st.session_state.get("invest", 0) != 0: 
+        st.caption(f"変化額: {jp_format(st.session_state['invest'])}")
+    else:
+        st.caption("スライダーまたは数値入力で調整")
 
-with slider_cols[1]:
+with s2:
+    st.markdown("**仕入・外注単価の変動**")
     cost_cut = st.slider(
-        "⚙️ 原価の削減・悪化率（ずっと）", 
-        min_value=-20.0, max_value=20.0, value=0.0, step=0.5, # 増える方にも振れるように
-        format="%.1f%%",
-        help="原価率が何％変化しますか？（マイナス＝改善・削減、プラス＝悪化・値上げ）"
+        "label_cost",
+        min_value=-20.0, max_value=20.0, value=0.0, step=0.5,
+        format="%+.1f%%",
+        help="原価率の変化（－：改善、＋：悪化）",
+        label_visibility="collapsed"
     )
+    # 原価率はシビアな調整が少ないためスライダーのみ
 
-with slider_cols[2]:
-    sales_change = st.slider(
-        "📈 売上目標の変化（ずっと）", 
-        min_value=-50, max_value=50, value=0, step=1, 
-        format="%+d%%",
-        help="現在の売上に対して、来月以降、毎月何％アップ（ダウン）を目指しますか？"
+with s3:
+    st.markdown("**売上目標の変化**")
+    st.slider(
+        "sales_slider_hidden",
+        min_value=-50, max_value=50, 
+        value=st.session_state.get("sales_change", 0),
+        step=1, format="%+d%%",
+        key="sales_slider", on_change=update_sales_from_slider,
+        label_visibility="collapsed"
+    )
+    st.number_input(
+        "sales_number_hidden",
+        min_value=-50, max_value=50, 
+        value=st.session_state.get("sales_change", 0),
+        step=1, 
+        key="sales_number", on_change=update_sales_from_number,
+        label_visibility="collapsed"
+    )
+    
+    target_rev_preview = st.session_state["revenue"] * (1 + st.session_state.get("sales_change", 0) / 100)
+    st.caption(f"目標: {jp_format(target_rev_preview)}")
+
+with s4:
+    st.markdown("**目標達成期間**")
+    ramp_months = st.slider(
+        "label_ramp",
+        min_value=1, max_value=6, value=1, step=1,
+        format="%dヶ月",
+        help="売上が目標に到達するまでの期間",
+        label_visibility="collapsed"
     )
 
 
 # ─────────────────────────────────────
 # 計算ロジック
 # ─────────────────────────────────────
-# 入力値の取得（session_stateから）
 rev = st.session_state["revenue"]
 cgs = st.session_state["cogs"]
 fxd = st.session_state["fixed_cost"]
 csh = st.session_state["cash"]
 rec = st.session_state["receivables"]
 pay = st.session_state["payables"]
+ind = st.session_state["industry"]
+invest = st.session_state.get("invest", 0)
+sales_change = st.session_state.get("sales_change", 0)
 
-# 基本係数
 v_rate = cgs / rev if rev > 0 else 0.0
-# 回転期間（月数）
-m_rec = rec / rev if rev > 0 else 0.0
-m_pay = pay / cgs if cgs > 0 else 0.0
+m_rec  = rec / rev if rev > 0 else 0.0
+m_pay  = pay / cgs if cgs > 0 else 0.0
 
-# シミュレーション計算
-sim_rev = rev * (1 + sales_change / 100)
-# cost_cut は「削減率」なので、マイナスほど良い（原価が下がる）。
-# 逆にプラス（悪化）の場合は原価率が上がる。
-# slider label: "原価の削減・悪化率" -> -20% (削減) ... +20% (悪化)
-# sim_v_rate = v_rate * (1 + rate) -> if -20%, (1 - 0.2) = 0.8倍になる。正しい。
-sim_v_rate = v_rate * (1 + cost_cut / 100) 
+target_rev    = rev * (1 + sales_change / 100)
+sim_v_rate    = v_rate * (1 + cost_cut / 100)
+sim_fxd       = fxd + invest
 
-sim_cgs = sim_rev * sim_v_rate
-sim_fxd = fxd + invest
-sim_op_profit = sim_rev - sim_cgs - sim_fxd # 月次営業利益
+mg_rate = max(1.0 - sim_v_rate, 0.001)
+bep_rev  = sim_fxd / mg_rate
+bep_diff = target_rev - bep_rev
 
-# 損益分岐点 (BEP)
-mg_rate = 1.0 - sim_v_rate # 限界利益率
-if mg_rate <= 0: mg_rate = 0.001 # ゼロ除算回避
-bep_rev = sim_fxd / mg_rate
-bep_diff = sim_rev - bep_rev
+target_op_profit = target_rev - (target_rev * sim_v_rate) - sim_fxd
+safety_margin_ratio = (bep_diff / target_rev * 100) if target_rev > 0 else 0.0
+invest_payback_sales = invest / mg_rate if invest > 0 and mg_rate > 0 else 0.0
 
-# キャッシュフロー予測 (簡易シミュレーション)
-months_label = [f"{i}ヶ月後" for i in range(7)]
-cf_line = [csh] # 0ヶ月目=現在
+months_label = [f"{i}ヶ月" for i in range(7)]
+cf_line = [csh]
 
-current_c = csh
+current_act_csh = csh
+prev_ar_balance = rec
+prev_ap_balance = pay
+
 for i in range(1, 7):
-    # ベースのキャッシュフロー（営業利益ベース）
-    base_flow = sim_op_profit 
+    if ramp_months <= 1:
+        month_rev = target_rev
+    else:
+        progress = min(i / ramp_months, 1.0)
+        month_rev = rev + (target_rev - rev) * progress
     
-    # 運転資金（売掛・買掛）の影響によるキャッシュ増減
-    # シミュレーション初期（特に回収サイト期間内）は、
-    # 過去の売上（変更前）の入金と、新しい売上（変更後）の入金が混在する
+    month_cgs = month_rev * sim_v_rate
+    month_op_profit = month_rev - month_cgs - sim_fxd
     
-    # ここでは簡易的に、「回収サイト期間内(m_recヶ月)」は
-    # 売上増分が現金化されない（＝利益はあるがキャッシュは増えない）として調整する
-    if i <= max(m_rec, 1): 
-        gap_rev = sim_rev - rev # 売上増分
-        # 増えた売上のうち、まだ現金になっていない分をマイナス
-        base_flow -= gap_rev
-        
-    current_c += base_flow
-    cf_line.append(current_c)
+    curr_ar_balance = month_rev * m_rec
+    curr_ap_balance = month_cgs * m_pay
+    
+    delta_ar = curr_ar_balance - prev_ar_balance
+    delta_ap = curr_ap_balance - prev_ap_balance
+    
+    month_cash_flow = month_op_profit - delta_ar + delta_ap
+    
+    current_act_csh += month_cash_flow
+    cf_line.append(current_act_csh)
+    
+    prev_ar_balance = curr_ar_balance
+    prev_ap_balance = curr_ap_balance
 
-# KPI計算
 min_cash = min(cf_line)
 short_month = next((i for i, x in enumerate(cf_line) if x < 0), None)
 
 # ─────────────────────────────────────
-# メイン画面：結果表示
+# RESULT: 診断結果
 # ─────────────────────────────────────
 st.markdown('<div class="section-title"><span class="section-badge">RESULT</span> 診断結果</div>', unsafe_allow_html=True)
 
-# KPI・グラフ・AI診断を配置
-# 上段：KPIカード
-k1, k2, k3, k4 = st.columns(4)
+# KPIカード
+k1, k2, k3, k4, k5 = st.columns(5)
 with k1:
-    s_cls = "kpi-positive" if sim_op_profit >= 0 else "kpi-negative"
-    st.markdown(f'<div class="kpi-card"><div class="label">月ごとの営業利益(予測)</div><div class="value {s_cls}">¥{sim_op_profit:,.0f}</div></div>', unsafe_allow_html=True)
+    cls = "kpi-positive" if target_op_profit >= 0 else "kpi-negative"
+    st.markdown(f'''<div class="kpi-card"><div class="label">月次営業利益（目標時）</div><div class="value {cls}">{jp_format(target_op_profit)}</div></div>''', unsafe_allow_html=True)
 with k2:
-    st.markdown(f'<div class="kpi-card"><div class="label">黒字になる最低売上(月)</div><div class="value">¥{bep_rev:,.0f}</div></div>', unsafe_allow_html=True)
+    cls = "kpi-positive" if safety_margin_ratio >= 0 else "kpi-negative"
+    st.markdown(f'''<div class="kpi-card"><div class="label">売上ダウン耐性</div><div class="value {cls}">{safety_margin_ratio:+.1f}%</div></div>''', unsafe_allow_html=True)
 with k3:
-    b_cls = "kpi-positive" if bep_diff >= 0 else "kpi-negative"
-    sign = "+" if bep_diff >= 0 else ""
-    # BEPとの差額 → 安全余裕額
-    st.markdown(f'<div class="kpi-card"><div class="label">黒字ラインまでの余裕</div><div class="value {b_cls}">{sign}¥{bep_diff:,.0f}</div></div>', unsafe_allow_html=True)
+    st.markdown(f'''<div class="kpi-card"><div class="label">黒字ライン（BEP）</div><div class="value">{jp_format(bep_rev)}</div></div>''', unsafe_allow_html=True)
 with k4:
     c_cls = "kpi-positive" if cf_line[-1] >= 0 else "kpi-negative"
-    st.markdown(f'<div class="kpi-card"><div class="label">6ヶ月後の現預金残高</div><div class="value {c_cls}">¥{cf_line[-1]:,.0f}</div></div>', unsafe_allow_html=True)
+    st.markdown(f'''<div class="kpi-card"><div class="label">6ヶ月後の現預金</div><div class="value {c_cls}">{jp_format(cf_line[-1])}</div></div>''', unsafe_allow_html=True)
+with k5:
+    if invest > 0:
+        st.markdown(f'''<div class="kpi-card"><div class="label">投資回収追加売上</div><div class="value">{jp_format(invest_payback_sales)}</div></div>''', unsafe_allow_html=True)
+    else:
+        chk_cls = "kpi-negative" if min_cash < 0 else "kpi-positive"
+        st.markdown(f'''<div class="kpi-card"><div class="label">最低資金残高</div><div class="value {chk_cls}">{jp_format(min_cash)}</div></div>''', unsafe_allow_html=True)
 
-st.write("") # Spacer
+st.write("")
 
-# 中段：グラフとゲージ
-g_col1, g_col2 = st.columns([3, 2], gap="large")
+if short_month:
+    st.markdown(f'<div class="alert-danger">💀 <b>資金ショート警告（死の谷）</b>: 売上増加に伴う運転資金負担により、{short_month}ヶ月目にショートします。黒字倒産のリスクがあります。</div>', unsafe_allow_html=True)
+elif min_cash < csh * 0.5:
+    st.markdown(f'<div class="alert-danger">⚠️ <b>資金注意</b>: 売上は増えますが、一時的に現預金が {jp_format(min_cash)} まで減少します（Jカーブ効果）。</div>', unsafe_allow_html=True)
 
-with g_col1:
-    # CFチャート
+# グラフ行
+g1, g2 = st.columns([3, 2], gap="large")
+
+with g1:
+    st.markdown('<div class="graph-header">【推移】資金繰り予測（Jカーブ詳細）</div>', unsafe_allow_html=True)
     fig = go.Figure()
-    # 警告ゾーン
-    fig.add_hrect(y0=min(min_cash, -1000000), y1=0, fillcolor="#FEF2F2", opacity=0.8, layer="below", line_width=0)
-    fig.add_hline(y=0, line_dash="dash", line_color="#EF4444", annotation_text="資金ショート (0円)", annotation_position="bottom right")
-    
-    # 折れ線
+    fig.add_hrect(y0=min(min_cash, -1_000_000), y1=0, fillcolor="#FEF2F2", opacity=0.8, layer="below", line_width=0)
+    fig.add_hline(y=0, line_dash="dash", line_color="#EF4444", annotation_text="資金ショート", annotation_position="bottom right")
     fig.add_trace(go.Scatter(
         x=months_label, y=cf_line, mode='lines+markers',
         line=dict(color='#1A365D', width=3),
         marker=dict(size=8, color=['#EF4444' if x < 0 else '#1A365D' for x in cf_line]),
-        name="現預金推移"
+        name="現預金推移",
+        text=[jp_format(v) for v in cf_line], hovertemplate='%{x}<br>残高: %{text}<extra></extra>'
     ))
-    
     fig.update_layout(
-        title="<b>資金繰り予測（向こう6ヶ月）</b>",
-        xaxis_title="", yaxis_title="現預金残高 (円)",
-        height=350, margin=dict(l=20, r=20, t=40, b=20),
-        plot_bgcolor='white', paper_bgcolor='white'
+        xaxis_title="", yaxis_title="現預金残高",
+        height=300, margin=dict(l=10, r=10, t=10, b=10),
+        plot_bgcolor='white', paper_bgcolor='white',
     )
     st.plotly_chart(fig, use_container_width=True)
-    
-    if short_month:
-        st.markdown(f'<div class="alert-danger">⚠️ <b>資金ショート警告</b>: {short_month}ヶ月目に残高がマイナスになります。</div>', unsafe_allow_html=True)
 
-with g_col2:
-    # BEPゲージ
-    max_val = max(sim_rev, bep_rev) * 1.3
-    fig2 = go.Figure(go.Indicator(
-        mode = "gauge+number+delta",
-        value = sim_rev,
-        domain = {'x': [0, 1], 'y': [0, 1]},
-        delta = {'reference': bep_rev, 'increasing': {'color': "#10B981"}, 'decreasing': {'color': "#EF4444"}},
-        title = {'text': "<b>売上 vs 黒字ライン</b>", 'font': {'size': 18}},
-        gauge = {
-            'axis': {'range': [None, max_val], 'tickwidth': 1, 'tickcolor': "#333"},
-            'bar': {'color': "#1A365D"},
-            'bgcolor': "white",
-            'borderwidth': 2,
-            'bordercolor': "#E2E8F0",
-            'steps': [
-                {'range': [0, bep_rev], 'color': "#FEF2F2"},
-                {'range': [bep_rev, max_val], 'color': "#ECFDF5"}],
-            'threshold': {
-                'line': {'color': "#EF4444", 'width': 4},
-                'thickness': 0.75,
-                'value': bep_rev}
-        }
+with g2:
+    st.markdown('<div class="graph-header">【安全性】目標売上と黒字ラインの距離</div>', unsafe_allow_html=True)
+    max_range = max(target_rev, bep_rev) * 1.3
+    
+    fig2 = go.Figure()
+    # 背景エリア（xref=x, yref=paperでグラフ領域全高をカバー）
+    fig2.add_shape(type="rect", x0=0, x1=bep_rev, y0=0, y1=1, xref="x", yref="paper",
+                   fillcolor="#FFE4E6", line_width=0, opacity=0.5) 
+    fig2.add_shape(type="rect", x0=bep_rev, x1=max_range, y0=0, y1=1, xref="x", yref="paper",
+                   fillcolor="#D1FAE5", line_width=0, opacity=0.5) 
+    
+    fig2.add_trace(go.Bar(
+        x=[target_rev], y=["売上"], orientation='h',
+        marker_color="#1A365D", width=0.5,
+        name="目標売上", text=jp_format(target_rev), textposition='auto'
     ))
-    fig2.update_layout(height=350, margin=dict(l=30, r=30, t=50, b=20))
+    
+    # 縦線（アノテーション位置調整）
+    fig2.add_vline(x=bep_rev, line_width=3, line_color="#EF4444", line_dash="dash")
+    
+    # アノテーション（yref=paper）
+    fig2.add_annotation(x=bep_rev, y=1.05, xref="x", yref="paper",
+                        text=f"黒字ライン\n{jp_format(bep_rev)}", showarrow=False, 
+                        font=dict(color="#EF4444", size=12), xanchor="left")
+
+    fig2.update_layout(
+        xaxis=dict(range=[0, max_range], visible=False),
+        yaxis=dict(visible=False),
+        height=250, margin=dict(l=10, r=10, t=30, b=10),
+        plot_bgcolor='white',
+        showlegend=False
+    )
     st.plotly_chart(fig2, use_container_width=True)
 
 
 # ─────────────────────────────────────
-# 下段：AI-CFO 診断ボタンと結果
+# AI-CFO 診断
 # ─────────────────────────────────────
-st.write("---")
-col_ai_btn, col_ai_res = st.columns([1, 4])
+st.markdown("---")
+col_btn, col_res = st.columns([1, 4])
 
-with col_ai_btn:
-    st.markdown("### 🤖 AI相談")
-    st.write("今のシミュレーション結果について、AI-CFOの意見を聞いてみましょう。")
-    ask_ai = st.button("💡 診断を実行する", type="primary", use_container_width=True)
+with col_btn:
+    st.markdown("### AI-CFO 相談")
+    st.write("シミュレーション結果をもとに、AIが経営アドバイスを生成します。")
+    ask_ai = st.button("診断を実行する", type="primary", use_container_width=True)
 
-with col_ai_res:
+with col_res:
     if ask_ai:
         api_key = None
         if "GEMINI_API_KEY" in st.secrets:
-             api_key = st.secrets["GEMINI_API_KEY"]
+            api_key = st.secrets["GEMINI_API_KEY"]
         elif "secrets" in st.secrets and "GEMINI_API_KEY" in st.secrets["secrets"]:
-             api_key = st.secrets["secrets"]["GEMINI_API_KEY"]
+            api_key = st.secrets["secrets"]["GEMINI_API_KEY"]
 
         if not api_key:
             st.error("APIキーが設定されていません。.streamlit/secrets.toml を確認してください。")
         else:
-            prompt = f"""
-あなたはプロのCFOです。以下の中小企業のシミュレーション結果を見て、経営アドバイスをください。
-出力はMarkdownで見やすく、以下の3点に絞ってください。
+            prompt = f"""あなたはプロのCFOです。以下の中小企業（業種: {ind}）のシミュレーション結果を分析し、経営者にアドバイスしてください。
 
-1. **財務の健康診断**: 利益構造や黒字ラインの観点から
-2. **キャッシュリスク**: 資金ショートの危険性と対策
-3. **戦略アクション**: 経営者が明日からやるべき3つのこと（専門用語禁止、中学生でもわかる言葉で）
+### ① 【超重要】資金繰り（死の谷）リスクの評価
+- 売上が急増する際、運転資金の増加によって一時的に資金が減る「Jカーブ効果（死の谷）」が発生していないか確認してください。
+- 今回のシミュレーションでは6ヶ月間の最低残高が「{jp_format(min_cash)}」になります。ここでショートする場合、または大きく減る場合は、**「売上増加のスピードに資金が追いついていません」**と強く警告してください。
+- 業界（{ind}）の平均的な回収サイクルと比べて、同社のサイト（入金{m_rec:.1f}ヶ月、出金{m_pay:.1f}ヶ月）が適正かも一言触れてください。
+
+### ② 財務の健康診断と潜在リスク
+- 安全余裕率は「{safety_margin_ratio:.1f}%」です。{ind}としてこの数値が安全圏か評価してください。
+- 表面上の数値が良くても手放しで褒めないでください。「もし〜なら」という最悪のシナリオを指摘してください。
+
+### ③ 明日からやるべき具体的戦術
+- 精神論禁止。「サイト交渉」「在庫圧縮」「値上げ」など具体的アクションを3つ。
 
 【データ】
-- 月間売上: {sim_rev:,.0f}円 (目標対比 {sales_change:+d}%)
-- 営業利益: {sim_op_profit:,.0f}円 (黒字ラインまで あと{bep_diff:,.0f}円)
-- 現預金残高(6ヶ月後): {cf_line[-1]:,.0f}円
-- 資金ショート発生月: {"なし" if not short_month else f"{short_month}ヶ月目"}
-- 損益分岐点比率: {sim_rev/bep_rev*100:.1f}% (100%超なら黒字)
-- 固定費増減(投資): 月額 {invest:+,.0f}円
-- 原価率変動: {cost_cut:+.1f}%
-            """
-            
-            with st.spinner("🧠 AI-CFOがデータを分析中..."):
+- 業種: {ind}
+- 売上: {jp_format(rev)} -> {jp_format(target_rev)} ({sales_change:+d}%)
+- 黒字ライン: {jp_format(bep_rev)}
+- 6ヶ月後残高: {jp_format(cf_line[-1])}
+- 資金ショート: {"あり（黒字倒産リスク）" if short_month else "なし"}
+"""
+            with st.spinner("AI-CFOがデータを分析中..."):
                 try:
                     genai.configure(api_key=api_key)
-                    # ユーザー指定により gemini-2.5-flash を利用
                     model = genai.GenerativeModel('gemini-2.5-flash')
                     response = model.generate_content(prompt)
-                    
-                    st.markdown(f'<div class="diagnosis-box"><h3>🎓 AI-CFOからの回答</h3>{response.text}</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="diagnosis-box">{response.text}</div>',
+                                unsafe_allow_html=True)
                 except Exception as e:
                     st.error(f"AI診断中にエラーが発生しました: {e}")
