@@ -466,13 +466,17 @@ with k3:
     st.markdown(f'''<div class="kpi-card"><div class="label">損益分岐点売上高 (BEP)</div><div class="value">{jp_format(bep_rev)}</div><div class="sub">月商{jp_format(bep_rev)}以上で黒字</div></div>''', unsafe_allow_html=True)
 with k4:
     c_cls = "kpi-positive" if cf_line[-1] >= 0 else "kpi-negative"
-    st.markdown(f'''<div class="kpi-card"><div class="label">6ヶ月後の現預金</div><div class="value {c_cls}">{jp_format(cf_line[-1])}</div></div>''', unsafe_allow_html=True)
+    st.markdown(f'''<div class="kpi-card"><div class="label">期間中 最低現預金残高</div><div class="value {c_cls}">{jp_format(min_cash)}</div></div>''', unsafe_allow_html=True)
 with k5:
     if invest > 0:
         st.markdown(f'''<div class="kpi-card"><div class="label">投資回収に必要な売上 (損益分岐点売上高の増加分)</div><div class="value">{jp_format(invest_payback_sales)}</div></div>''', unsafe_allow_html=True)
     else:
-        chk_cls = "kpi-negative" if min_cash < 0 else "kpi-positive"
-        st.markdown(f'''<div class="kpi-card"><div class="label">最低資金残高</div><div class="value {chk_cls}">{jp_format(min_cash)}</div></div>''', unsafe_allow_html=True)
+        # 投資なしの場合、最低残高を表示するスペースが重複するため、5つ目のカードはブランクにするか別の情報を入れる
+        # ここでは「最低資金残高」をk4に移動し、k5は予備スペースとする、あるいは「キャッシュフロー変動額」などを出す
+        # ユーザー要望で「最低資金残高が何を示すか不明」とのことなので、k4のラベルを具体的にしました。
+        # k5が空くので、ここには「月商倍率」などを入れると分かりやすい
+        months_sales_ratio = min_cash / target_rev if target_rev > 0 else 0
+        st.markdown(f'''<div class="kpi-card"><div class="label">現預金月商倍率 (最低時)</div><div class="value">{months_sales_ratio:.1f}ヶ月</div></div>''', unsafe_allow_html=True)
 
 st.write("")
 
@@ -575,24 +579,31 @@ with col_res:
 
 ※厳守事項：利益、不足額、回収日数などの数値は絶対にAI自身で計算・推測しないでください。必ず上記【データ】セクションで渡された数値をそのまま引用して解説してください。
 
-※財務の健康診断において、単に利益の額や安全余裕率に触れるだけでなく、「変動費率（原価の重さ）」や「固定費の重さ」など、なぜそのような利益構造になっているのかという【根本原因】を必ず分析して指摘してください。
+※【超重要】カタカナ語（アップセル、リードタイム、アライアンス、コンセンサスなど）は使用厳禁です。
+必ず現場の従業員や中学生でも直感的にわかる、泥臭く平易な日本語（例：お金の回り、ついで買い、待ち時間、最悪の事態）に翻訳して話してください。
+ただし、日常的に使われる言葉（リスク、コスト、システムなど）は許容しますが、コンサル用語は徹底して排除してください。
+
+※【超重要】全方位の一般的なコストカット提案（あれもこれもやれ）は絶対にやめてください。
+渡されたデータ（特に『固定費増(投資)』や『変動費率』）を見て、利益を圧迫している【最大の要因1つ】を特定し、そこだけをピンポイントで厳しく指摘・メスを入れてください。
+（例：投資額が重すぎるなら、その投資計画自体の撤回や延期を強く迫ること、原価が高すぎるなら仕入れの見直しのみを迫ること）
 
 ### ① 資金繰りリスクの評価
-- 資金推移（6ヶ月間の最低残高: {jp_format(min_cash)}）を分析し、資金ショートのリスクがあれば警告してください。
+- 資金推移（6ヶ月間で最も現金が減った時の残高: {jp_format(min_cash)}）を分析し、資金ショートのリスクがあれば警告してください。
 - ショートや減少の原因が「売上急増による運転資金の増加（黒字倒産リスク）」なのか、「赤字垂れ流しによる資金枯渇」なのかを明確に区別して指摘してください。
 - 業界（{ind}）の平均的な回収サイクルと比べて、貴社のサイト（入金{m_rec:.1f}ヶ月、出金{m_pay:.1f}ヶ月）が適正かも一言触れてください。
 
 ### ② 財務の健康診断と潜在リスク
+- 「変動費率（原価の重さ）」や「固定費の重さ」など、なぜそのような利益構造になっているのかという【根本原因】を分析してください。
 - 安全余裕率は「{safety_margin_ratio:.1f}%」です。{ind}としてこの数値が安全圏か評価してください。
-- 表面上の数値が良くても手放しで褒めないでください。「もし〜なら」という最悪のシナリオを指摘してください。
 
 ### ③ 明日からやるべき具体的戦術
-- 精神論禁止。「サイト交渉」「在庫圧縮」「値上げ」など具体的アクションを3つ。
+- 精神論禁止。最大の要因を解決するための具体的アクションを3つ提示してください。
 
 【データ】
 - 業種: {ind}
 - 売上: {jp_format(rev)} -> {jp_format(target_rev)} ({sales_change:+d}%)
 - 変動費率（原価率）: {sim_v_rate:.1%}
+- 固定費増（社長の決断した投資額）: {jp_format(invest)}
 - 損益分岐点売上高: {jp_format(bep_rev)}
 - 6ヶ月後残高: {jp_format(cf_line[-1])}
 - 資金ショート: {"あり（黒字倒産リスク）" if short_month else "なし"}
