@@ -403,49 +403,51 @@ bs_step      = get_step_size(st.session_state["cash"])
 
 with col_pl:
     st.markdown("##### 損益計算書（月次平均）")
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown(custom_label("月間売上高", "直近の月平均売上高を入力してください（万円単位・税抜）。"), unsafe_allow_html=True)
-        st.session_state["revenue"] = st.number_input(
-            "月間売上高", min_value=0, step=revenue_step,
-            value=st.session_state["revenue"], format="%d", label_visibility="collapsed")
-        
-        st.markdown(custom_label("変動費（仕入・外注・材料）", "売上増減に比例するコスト（材料費、仕入商品原価、外注費など）。"), unsafe_allow_html=True)
-        st.session_state["cogs"] = st.number_input(
-            "変動費（仕入・外注・材料）", min_value=0, step=cogs_step,
-            value=st.session_state["cogs"], format="%d", label_visibility="collapsed")
-    with c2:
-        st.markdown(custom_label("固定費（家賃・給与・その他）", "売上がゼロでも毎月かかるコスト（家賃、人件費、リース料、水道光熱費など）。"), unsafe_allow_html=True)
-        st.session_state["fixed_cost"] = st.number_input(
-            "固定費（家賃・給与・その他）", min_value=0, step=fixed_step,
-            value=st.session_state["fixed_cost"], format="%d", label_visibility="collapsed")
-        
-        if st.session_state["revenue"] > 0:
-            rate = st.session_state["cogs"] / st.session_state["revenue"]
-            st.info(f"変動費率: **{rate:.1%}**")
+    
+    st.markdown(custom_label("月間売上高", "直近の月平均売上高を入力してください（万円単位・税抜）。"), unsafe_allow_html=True)
+    st.session_state["revenue"] = st.number_input(
+        "月間売上高", min_value=0, step=revenue_step,
+        value=st.session_state["revenue"], format="%d", label_visibility="collapsed")
+    
+    st.markdown(custom_label("変動費（仕入・外注・材料）", "売上増減に比例するコスト（材料費、仕入商品原価、外注費など）。"), unsafe_allow_html=True)
+    st.session_state["cogs"] = st.number_input(
+        "変動費（仕入・外注・材料）", min_value=0, step=cogs_step,
+        value=st.session_state["cogs"], format="%d", label_visibility="collapsed")
+    
+    if st.session_state["revenue"] > 0:
+        rate = st.session_state["cogs"] / st.session_state["revenue"]
+        st.caption(f"変動費率: **{rate:.1%}**")
+
+    st.markdown(custom_label("固定費（家賃・給与・その他）", "売上がゼロでも毎月かかるコスト（家賃、人件費、リース料、水道光熱費など）。"), unsafe_allow_html=True)
+    st.session_state["fixed_cost"] = st.number_input(
+        "固定費（家賃・給与・その他）", min_value=0, step=fixed_step,
+        value=st.session_state["fixed_cost"], format="%d", label_visibility="collapsed")
 
 with col_bs:
     st.markdown("##### 貸借対照表（現在の残高）")
-    c3, c4 = st.columns(2)
-    with c3:
-        st.session_state["cash"] = st.number_input(
-            "現預金残高", min_value=0, step=bs_step,
-            value=st.session_state["cash"], format="%d")
-        st.session_state["receivables"] = st.number_input(
-            "売掛金残高", min_value=0, step=bs_step,
-            value=st.session_state["receivables"], format="%d")
-    with c4:
-        st.session_state["payables"] = st.number_input(
-            "買掛金残高", min_value=0, step=bs_step,
-            value=st.session_state["payables"], format="%d")
+    
+    st.markdown(custom_label("現預金残高", "現在の現預金残高を入力してください。"), unsafe_allow_html=True)
+    st.session_state["cash"] = st.number_input(
+        "現預金残高", min_value=0, step=bs_step,
+        value=st.session_state["cash"], format="%d", label_visibility="collapsed")
+    
+    st.markdown(custom_label("売掛金残高", "まだ回収していない売上の合計額。"), unsafe_allow_html=True)
+    st.session_state["receivables"] = st.number_input(
+        "売掛金残高", min_value=0, step=bs_step,
+        value=st.session_state["receivables"], format="%d", label_visibility="collapsed")
+    
+    st.markdown(custom_label("買掛金残高", "まだ支払っていない仕入・経費の合計額。"), unsafe_allow_html=True)
+    st.session_state["payables"] = st.number_input(
+        "買掛金残高", min_value=0, step=bs_step,
+        value=st.session_state["payables"], format="%d", label_visibility="collapsed")
 
-        site_parts = []
-        if st.session_state["revenue"] > 0:
-            site_parts.append(f"売掛回収: {st.session_state['receivables']/st.session_state['revenue']:.1f}ヶ月")
-        if st.session_state["cogs"] > 0:
-            site_parts.append(f"買掛支払: {st.session_state['payables']/st.session_state['cogs']:.1f}ヶ月")
-        if site_parts:
-            st.info(f"{' ／ '.join(site_parts)}")
+    site_parts = []
+    if st.session_state["revenue"] > 0:
+        site_parts.append(f"売掛回収: {st.session_state['receivables']/st.session_state['revenue']:.1f}ヶ月")
+    if st.session_state["cogs"] > 0:
+        site_parts.append(f"買掛支払: {st.session_state['payables']/st.session_state['cogs']:.1f}ヶ月")
+    if site_parts:
+        st.info("  \n".join(site_parts))
 
 
 # ─────────────────────────────────────
