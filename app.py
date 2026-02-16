@@ -1,7 +1,7 @@
 """
 GAIS AI-CFO（未来会計シミュレーター）
 =======================================
-決算書の数字を入力し、経営シナリオの感度分析（Jカーブ効果含む）を行うコックピット。
+決算書の数字を入力し、経営シナリオの感度分析を行うコックピット。
 Gemini 2.5 Flash による AI-CFO 診断付き。
 """
 
@@ -170,7 +170,7 @@ section[data-testid="stSidebar"] button[kind="hex"] {
 st.markdown("""
 <div class="main-header">
     <h1>GAIS AI-CFO ｜ 未来会計シミュレーター</h1>
-    <p>数字を入力し、スライダーで経営シナリオを変えると、資金繰り（死の谷）とリスクが可視化されます</p>
+    <p>数字を入力し、スライダーで経営シナリオを変えると、資金繰りとリスクが可視化されます</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -314,7 +314,7 @@ with col_bs:
 # STEP 2: シナリオ設定
 # ─────────────────────────────────────
 st.markdown('<div class="section-title"><span class="section-badge">STEP 2</span> シナリオ設定（感度分析）</div>', unsafe_allow_html=True)
-st.caption("※ 「売上が急増すると運転資金が不足する（死の谷）」リスクも計算します。")
+st.caption("※ 売上が急増する際、運転資金の増加によって一時的に資金が減るリスクがあります。")
 
 s1, s2, s3, s4 = st.columns(4, gap="medium")
 slider_invest_step = max(10_000, fixed_step // 10)
@@ -352,7 +352,6 @@ with s2:
         help="原価率の変化（－：改善、＋：悪化）",
         label_visibility="collapsed"
     )
-    # 原価率はシビアな調整が少ないためスライダーのみ
 
 with s3:
     st.markdown("**売上目標の変化**")
@@ -462,75 +461,85 @@ with k1:
     st.markdown(f'''<div class="kpi-card"><div class="label">月次営業利益（目標時）</div><div class="value {cls}">{jp_format(target_op_profit)}</div></div>''', unsafe_allow_html=True)
 with k2:
     cls = "kpi-positive" if safety_margin_ratio >= 0 else "kpi-negative"
-    st.markdown(f'''<div class="kpi-card"><div class="label">売上ダウン耐性</div><div class="value {cls}">{safety_margin_ratio:+.1f}%</div></div>''', unsafe_allow_html=True)
+    st.markdown(f'''<div class="kpi-card"><div class="label">売上ダウン耐性 (安全余裕率)</div><div class="value {cls}">{safety_margin_ratio:+.1f}%</div><div class="sub">あと{safety_margin_ratio:.1f}%落ちても黒字</div></div>''', unsafe_allow_html=True)
 with k3:
-    st.markdown(f'''<div class="kpi-card"><div class="label">黒字ライン（BEP）</div><div class="value">{jp_format(bep_rev)}</div></div>''', unsafe_allow_html=True)
+    st.markdown(f'''<div class="kpi-card"><div class="label">損益分岐点売上高 (BEP)</div><div class="value">{jp_format(bep_rev)}</div><div class="sub">月商{jp_format(bep_rev)}以上で黒字</div></div>''', unsafe_allow_html=True)
 with k4:
     c_cls = "kpi-positive" if cf_line[-1] >= 0 else "kpi-negative"
     st.markdown(f'''<div class="kpi-card"><div class="label">6ヶ月後の現預金</div><div class="value {c_cls}">{jp_format(cf_line[-1])}</div></div>''', unsafe_allow_html=True)
 with k5:
     if invest > 0:
-        st.markdown(f'''<div class="kpi-card"><div class="label">投資回収追加売上</div><div class="value">{jp_format(invest_payback_sales)}</div></div>''', unsafe_allow_html=True)
+        st.markdown(f'''<div class="kpi-card"><div class="label">投資回収に必要な売上 (損益分岐点売上高の増加分)</div><div class="value">{jp_format(invest_payback_sales)}</div></div>''', unsafe_allow_html=True)
     else:
         chk_cls = "kpi-negative" if min_cash < 0 else "kpi-positive"
         st.markdown(f'''<div class="kpi-card"><div class="label">最低資金残高</div><div class="value {chk_cls}">{jp_format(min_cash)}</div></div>''', unsafe_allow_html=True)
 
 st.write("")
 
-if short_month:
-    st.markdown(f'<div class="alert-danger">💀 <b>資金ショート警告（死の谷）</b>: 売上増加に伴う運転資金負担により、{short_month}ヶ月目にショートします。黒字倒産のリスクがあります。</div>', unsafe_allow_html=True)
-elif min_cash < csh * 0.5:
-    st.markdown(f'<div class="alert-danger">⚠️ <b>資金注意</b>: 売上は増えますが、一時的に現預金が {jp_format(min_cash)} まで減少します（Jカーブ効果）。</div>', unsafe_allow_html=True)
-
 # グラフ行
 g1, g2 = st.columns([3, 2], gap="large")
 
+# 単位調整ロジック（万円/億円）
+max_cash = max(max(cf_line), abs(min(cf_line)))
+if max_cash >= 100_000_000:
+    unit_str = "億円"
+    divider = 100_000_000
+else:
+    unit_str = "万円"
+    divider = 10_000
+
+y_cf_scaled = [v / divider for v in cf_line]
+
 with g1:
-    st.markdown('<div class="graph-header">【推移】資金繰り予測（Jカーブ詳細）</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="graph-header">【推移】資金繰り予測 ({unit_str}単位)</div>', unsafe_allow_html=True)
     fig = go.Figure()
-    fig.add_hrect(y0=min(min_cash, -1_000_000), y1=0, fillcolor="#FEF2F2", opacity=0.8, layer="below", line_width=0)
-    fig.add_hline(y=0, line_dash="dash", line_color="#EF4444", annotation_text="資金ショート", annotation_position="bottom right")
+    # 軸の最小値調整（ショート時）
+    min_y_scaled = min(min(y_cf_scaled), -100) if min(y_cf_scaled) < 0 else 0
+    
+    fig.add_hrect(y0=min_y_scaled, y1=0, fillcolor="#FEF2F2", opacity=0.8, layer="below", line_width=0)
+    fig.add_hline(y=0, line_dash="dash", line_color="#EF4444", annotation_text="0", annotation_position="bottom right")
     fig.add_trace(go.Scatter(
-        x=months_label, y=cf_line, mode='lines+markers',
+        x=months_label, y=y_cf_scaled, mode='lines+markers',
         line=dict(color='#1A365D', width=3),
         marker=dict(size=8, color=['#EF4444' if x < 0 else '#1A365D' for x in cf_line]),
         name="現預金推移",
         text=[jp_format(v) for v in cf_line], hovertemplate='%{x}<br>残高: %{text}<extra></extra>'
     ))
     fig.update_layout(
-        xaxis_title="", yaxis_title="現預金残高",
+        xaxis_title="", yaxis_title=f"現預金残高 ({unit_str})",
         height=300, margin=dict(l=10, r=10, t=10, b=10),
         plot_bgcolor='white', paper_bgcolor='white',
     )
     st.plotly_chart(fig, use_container_width=True)
 
 with g2:
-    st.markdown('<div class="graph-header">【安全性】目標売上と黒字ラインの距離</div>', unsafe_allow_html=True)
+    st.markdown('<div class="graph-header">【安全性】目標売上と損益分岐点売上高の距離</div>', unsafe_allow_html=True)
     max_range = max(target_rev, bep_rev) * 1.3
+    # こちらも単位調整
+    max_range_scaled = max_range / divider
+    target_rev_scaled = target_rev / divider
+    bep_rev_scaled = bep_rev / divider
     
     fig2 = go.Figure()
-    # 背景エリア（xref=x, yref=paperでグラフ領域全高をカバー）
-    fig2.add_shape(type="rect", x0=0, x1=bep_rev, y0=0, y1=1, xref="x", yref="paper",
+    fig2.add_shape(type="rect", x0=0, x1=bep_rev_scaled, y0=0, y1=1, xref="x", yref="paper",
                    fillcolor="#FFE4E6", line_width=0, opacity=0.5) 
-    fig2.add_shape(type="rect", x0=bep_rev, x1=max_range, y0=0, y1=1, xref="x", yref="paper",
+    fig2.add_shape(type="rect", x0=bep_rev_scaled, x1=max_range_scaled, y0=0, y1=1, xref="x", yref="paper",
                    fillcolor="#D1FAE5", line_width=0, opacity=0.5) 
     
     fig2.add_trace(go.Bar(
-        x=[target_rev], y=["売上"], orientation='h',
+        x=[target_rev_scaled], y=["売上"], orientation='h',
         marker_color="#1A365D", width=0.5,
         name="目標売上", text=jp_format(target_rev), textposition='auto'
     ))
     
-    # 縦線（アノテーション位置調整）
-    fig2.add_vline(x=bep_rev, line_width=3, line_color="#EF4444", line_dash="dash")
+    fig2.add_vline(x=bep_rev_scaled, line_width=3, line_color="#EF4444", line_dash="dash")
     
-    # アノテーション（yref=paper）
-    fig2.add_annotation(x=bep_rev, y=1.05, xref="x", yref="paper",
-                        text=f"黒字ライン\n{jp_format(bep_rev)}", showarrow=False, 
+    fig2.add_annotation(x=bep_rev_scaled, y=1.05, xref="x", yref="paper",
+                        text=f"損益分岐点\n{jp_format(bep_rev)}", showarrow=False, 
                         font=dict(color="#EF4444", size=12), xanchor="left")
 
     fig2.update_layout(
-        xaxis=dict(range=[0, max_range], visible=False),
+        xaxis=dict(range=[0, max_range_scaled], visible=False),
         yaxis=dict(visible=False),
         height=250, margin=dict(l=10, r=10, t=30, b=10),
         plot_bgcolor='white',
@@ -561,12 +570,17 @@ with col_res:
         if not api_key:
             st.error("APIキーが設定されていません。.streamlit/secrets.toml を確認してください。")
         else:
-            prompt = f"""あなたはプロのCFOです。以下の中小企業（業種: {ind}）のシミュレーション結果を分析し、経営者にアドバイスしてください。
+            prompt = f"""以下の中小企業（業種: {ind}）のシミュレーション結果を分析し、貴社に向けたアドバイスを作成してください。
+なお、ユーザーの役職を特定せず、「社長」などの呼びかけは避け、「貴社」という表現を使用してください。
 
-### ① 【超重要】資金繰り（死の谷）リスクの評価
-- 売上が急増する際、運転資金の増加によって一時的に資金が減る「Jカーブ効果（死の谷）」が発生していないか確認してください。
-- 今回のシミュレーションでは6ヶ月間の最低残高が「{jp_format(min_cash)}」になります。ここでショートする場合、または大きく減る場合は、**「売上増加のスピードに資金が追いついていません」**と強く警告してください。
-- 業界（{ind}）の平均的な回収サイクルと比べて、同社のサイト（入金{m_rec:.1f}ヶ月、出金{m_pay:.1f}ヶ月）が適正かも一言触れてください。
+※厳守事項：利益、不足額、回収日数などの数値は絶対にAI自身で計算・推測しないでください。必ず上記【データ】セクションで渡された数値をそのまま引用して解説してください。
+
+※財務の健康診断において、単に利益の額や安全余裕率に触れるだけでなく、「変動費率（原価の重さ）」や「固定費の重さ」など、なぜそのような利益構造になっているのかという【根本原因】を必ず分析して指摘してください。
+
+### ① 資金繰りリスクの評価
+- 資金推移（6ヶ月間の最低残高: {jp_format(min_cash)}）を分析し、資金ショートのリスクがあれば警告してください。
+- ショートや減少の原因が「売上急増による運転資金の増加（黒字倒産リスク）」なのか、「赤字垂れ流しによる資金枯渇」なのかを明確に区別して指摘してください。
+- 業界（{ind}）の平均的な回収サイクルと比べて、貴社のサイト（入金{m_rec:.1f}ヶ月、出金{m_pay:.1f}ヶ月）が適正かも一言触れてください。
 
 ### ② 財務の健康診断と潜在リスク
 - 安全余裕率は「{safety_margin_ratio:.1f}%」です。{ind}としてこの数値が安全圏か評価してください。
@@ -578,7 +592,8 @@ with col_res:
 【データ】
 - 業種: {ind}
 - 売上: {jp_format(rev)} -> {jp_format(target_rev)} ({sales_change:+d}%)
-- 黒字ライン: {jp_format(bep_rev)}
+- 変動費率（原価率）: {sim_v_rate:.1%}
+- 損益分岐点売上高: {jp_format(bep_rev)}
 - 6ヶ月後残高: {jp_format(cf_line[-1])}
 - 資金ショート: {"あり（黒字倒産リスク）" if short_month else "なし"}
 """
