@@ -1,0 +1,12 @@
+# General
+__pycache__/
+*.py[cod]
+.DS_Store
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Environment
+venv/
+env/
+.env
