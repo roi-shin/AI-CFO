@@ -38,6 +38,48 @@ def jp_format(val):
     else:
         return f"{val:,.0f}円"
 
+# Helper: Generate Tooltip HTML
+def get_tooltip_html(help_text):
+    if not help_text:
+        return ""
+    return f'''<div class="tooltip-container">
+        <svg class="tooltip-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM13 17H11V15H13V17ZM13 13H11V11H13V13ZM12 13C11.45 13 11 12.55 11 12C11 11.45 11.45 11 12 11C12.55 11 13 11.45 13 12C13 12.55 12.55 13 12 13ZM12 9C10.9 9 10 9.9 10 11H12C12 12.1 12.9 13 14 13C15.1 13 16 12.1 16 11C16 9.9 15.1 9 14 9H12ZM12 5C11.45 5 11 4.55 11 4C11 3.45 11.45 3 12 3C12.55 3 13 3.45 13 4C13 4.55 12.55 5 12 5Z" fill="currentColor" opacity="0" />
+            <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2ZM13 16C13 16.5523 12.5523 17 12 17C11.4477 17 11 16.5523 11 16C11 15.4477 11.4477 15 12 15C12.5523 15 13 15.4477 13 16ZM12 14C11.4477 14 11 13.5523 11 13V11C11 10.4477 11.4477 10 12 10C12.5523 10 13 10.4477 13 11V13C13 13.5523 12.5523 14 12 14ZM16.0006 12C16.0368 12.0002 16.0732 12.0002 16.1095 12L16 12C16.0002 12 16.0004 12 16.0006 12ZM14.94 6.88C15.3542 7.29421 15.3542 7.96579 14.94 8.38C14.5258 8.79421 13.8542 8.79421 13.44 8.38C13.0495 7.98947 12.4162 7.98947 12.0257 8.38C11.6351 8.77053 11.6351 9.40384 12.0257 9.79437L12.0306 9.79932L12.0366 9.80528L12.9814 10.75C13.4563 11.2249 13.4563 11.9949 12.9814 12.4699C12.5065 12.9448 11.7365 12.9448 11.2616 12.4699L10.3168 11.5251L10.3113 11.5196C9.28014 10.4884 9.28014 8.81628 10.3113 7.78508C11.3425 6.75389 13.0146 6.75389 14.0458 7.78508L14.94 6.88Z" fill="currentColor" fill-opacity="0" />
+            <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM13 17H11V15H13V17ZM12 13C12 13 12 13 12 13C12 13 12 13 12 13C11 13 11 12.5 11 12C11 10.5 13 10.5 13 9C13 8.5 12.5 8 12 8C11.5 8 11 8.5 11 9H9C9 7.5 10.5 6 12 6C13.5 6 15 7.5 15 9C15 11 13 11 13 12V13Z" fill="#94A3B8"/>
+        </svg>
+        <span class="tooltip-text">{help_text}</span>
+    </div>'''
+
+# Helper function for Custom Input Label
+def custom_label(label, help_text=""):
+    tooltip_html = get_tooltip_html(help_text)
+    return f'''<div class="input-label-row">{label}{tooltip_html}</div>'''
+
+# Helper function for Custom Metric Card
+def custom_metric(label, value, sub="", help_text="", color_type="neutral"):
+    # color_type: "positive" (Green), "negative" (Red), "neutral" (Dark Blue/Black)
+    if color_type == "positive":
+        val_class = "metric-value-positive"
+    elif color_type == "negative":
+        val_class = "metric-value-negative"
+    else:
+        val_class = "metric-value-neutral"
+    
+    # Tooltip HTML
+    tooltip_html = get_tooltip_html(help_text)
+
+    return f'''
+    <div class="custom-metric-card">
+        <div class="metric-label-row">
+            <span class="metric-label">{label}</span>
+            {tooltip_html}
+        </div>
+        <div class="metric-value {val_class}">{value}</div>
+        <div class="metric-sub">{sub}</div>
+    </div>
+    '''
+
 # ─────────────────────────────────────
 # 回帰コールバック（スライダー同期）
 # ─────────────────────────────────────
@@ -139,47 +181,44 @@ html, body, [class*="css"] {
     margin-top: 4px;
 }
 
-/* Tooltip Styles */
+/* Tooltip Styles (Native Look) */
 .tooltip-container {
     position: relative;
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
     cursor: help;
+    margin-left: 2px;
 }
 .tooltip-icon {
-    font-size: 14px;
-    color: #94A3B8;
-    background: #F1F5F9;
-    border-radius: 50%;
-    width: 16px;
-    height: 16px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: bold;
+    width: 1rem;
+    height: 1rem;
+    color: #808495;
+    transition: color 0.2s;
 }
 .tooltip-container:hover .tooltip-icon {
-    color: #1A365D;
-    background: #E2E8F0;
+    color: #262730;
 }
 .tooltip-text {
     visibility: hidden;
-    width: 200px;
-    background-color: #334155;
-    color: #fff;
+    width: max-content;
+    max-width: 250px;
+    background-color: #262730;
+    color: #ffffff;
     text-align: left;
-    border-radius: 6px;
-    padding: 8px;
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
     position: absolute;
-    z-index: 10;
-    bottom: 125%;
+    z-index: 100;
+    bottom: 150%;
     left: 50%;
-    margin-left: -100px;
+    transform: translateX(-50%);
     opacity: 0;
-    transition: opacity 0.3s;
-    font-size: 0.75rem;
+    transition: opacity 0.2s ease-in-out;
+    font-size: 0.85rem;
     font-weight: normal;
-    line-height: 1.4;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    line-height: 1.5;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    white-space: normal;
 }
 .tooltip-text::after {
     content: "";
@@ -189,11 +228,22 @@ html, body, [class*="css"] {
     margin-left: -5px;
     border-width: 5px;
     border-style: solid;
-    border-color: #334155 transparent transparent transparent;
+    border-color: #262730 transparent transparent transparent;
 }
 .tooltip-container:hover .tooltip-text {
     visibility: visible;
     opacity: 1;
+}
+
+/* Custom Input Label (Step 1) */
+.input-label-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 2px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #475569;
 }
 
 /* ── 診断エリア ── */
@@ -355,16 +405,20 @@ with col_pl:
     st.markdown("##### 損益計算書（月次平均）")
     c1, c2 = st.columns(2)
     with c1:
+        st.markdown(custom_label("月間売上高", "直近の月平均売上高を入力してください（万円単位・税抜）。"), unsafe_allow_html=True)
         st.session_state["revenue"] = st.number_input(
             "月間売上高", min_value=0, step=revenue_step,
-            value=st.session_state["revenue"], format="%d")
+            value=st.session_state["revenue"], format="%d", label_visibility="collapsed")
+        
+        st.markdown(custom_label("変動費（仕入・外注・材料）", "売上増減に比例するコスト（材料費、仕入商品原価、外注費など）。"), unsafe_allow_html=True)
         st.session_state["cogs"] = st.number_input(
             "変動費（仕入・外注・材料）", min_value=0, step=cogs_step,
-            value=st.session_state["cogs"], format="%d", help="売上増減に比例するコスト")
+            value=st.session_state["cogs"], format="%d", label_visibility="collapsed")
     with c2:
+        st.markdown(custom_label("固定費（家賃・給与・その他）", "売上がゼロでも毎月かかるコスト（家賃、人件費、リース料、水道光熱費など）。"), unsafe_allow_html=True)
         st.session_state["fixed_cost"] = st.number_input(
             "固定費（家賃・給与・その他）", min_value=0, step=fixed_step,
-            value=st.session_state["fixed_cost"], format="%d", help="売上ゼロでもかかるコスト")
+            value=st.session_state["fixed_cost"], format="%d", label_visibility="collapsed")
         
         if st.session_state["revenue"] > 0:
             rate = st.session_state["cogs"] / st.session_state["revenue"]
@@ -539,36 +593,7 @@ months_sales_ratio = min_cash / target_rev if target_rev > 0 else 0
 # ─────────────────────────────────────
 st.markdown('<div class="section-title"><span class="section-badge">RESULT</span> 診断結果</div>', unsafe_allow_html=True)
 
-# Helper function for Custom Metric Card
-def custom_metric(label, value, sub="", help_text="", color_type="neutral"):
-    # color_type: "positive" (Green), "negative" (Red), "neutral" (Dark Blue/Black)
-    
-    if color_type == "positive":
-        val_class = "metric-value-positive"
-    elif color_type == "negative":
-        val_class = "metric-value-negative"
-    else:
-        val_class = "metric-value-neutral"
-    
-    # Tooltip HTML
-    tooltip_html = ""
-    if help_text:
-        tooltip_html = f'''<div class="tooltip-container">
-            <span class="tooltip-icon">?</span>
-            <span class="tooltip-text">{help_text}</span>
-        </div>'''
 
-    html = f'''
-    <div class="custom-metric-card">
-        <div class="metric-label-row">
-            <span class="metric-label">{label}</span>
-            {tooltip_html}
-        </div>
-        <div class="metric-value {val_class}">{value}</div>
-        <div class="metric-sub">{sub}</div>
-    </div>
-    '''
-    return html
 
 # KPIカード
 k1, k2, k3, k4, k5 = st.columns(5)
